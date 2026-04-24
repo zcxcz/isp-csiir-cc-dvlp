@@ -16,13 +16,9 @@
 #include <string>
 #include <vector>
 
-#include <ap_fixed.h>
-#include <hls_stream.h>
-
 #include "isp_csiir_hls_top.cpp"
 
 using namespace std;
-using namespace hls;
 
 namespace {
 
@@ -179,8 +175,8 @@ ImgInfo load_img_info(const string& filename) {
 }
 
 vector<pixel_t> process_top(const vector<pixel_t>& input, int width, int height, ISPCSIIR_Regs& regs) {
-    stream<axis_pixel_t> din_stream;
-    stream<axis_pixel_t> dout_stream;
+    csiir_hls::stream_t<axis_pixel_t> din_stream;
+    csiir_hls::stream_t<axis_pixel_t> dout_stream;
     vector<pixel_t> output(static_cast<size_t>(width) * static_cast<size_t>(height));
 
     for (int y = 0; y < height; y++) {

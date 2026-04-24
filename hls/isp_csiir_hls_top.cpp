@@ -10,9 +10,8 @@
 #ifndef ISP_CSIIR_HLS_TOP_HPP
 #define ISP_CSIIR_HLS_TOP_HPP
 
-#include <ap_fixed.h>
-#include <hls_stream.h>
 #include <cstring>
+#include "csiir_hls_backend.hpp"
 #include "isp_csiir_regs.hpp"
 
 //==============================================================================
@@ -32,22 +31,22 @@ static const int MAX_HEIGHT = 4096;
 static const int PSRAM_PIXEL_WIDTH = DATA_WIDTH_I * 2;   // 20-bit for 2 pixels
 static const int PSRAM_GRAD_WIDTH = GRAD_WIDTH_I * 2;    // 28-bit for 2 gradients
 
-typedef ap_uint<DATA_WIDTH_I> pixel_t;
-typedef ap_int<SIGNED_WIDTH_I> s11_t;
-typedef ap_uint<GRAD_WIDTH_I> grad_t;
-typedef ap_int<ACC_WIDTH_I> acc_t;
+typedef csiir_hls::uint_t<DATA_WIDTH_I> pixel_t;
+typedef csiir_hls::int_t<SIGNED_WIDTH_I> s11_t;
+typedef csiir_hls::uint_t<GRAD_WIDTH_I> grad_t;
+typedef csiir_hls::int_t<ACC_WIDTH_I> acc_t;
 
 // Packed types for 1PSRAM time-multiplexing
-typedef ap_uint<PSRAM_PIXEL_WIDTH> pixel_pack_t;   // 2 pixels packed
-typedef ap_uint<PSRAM_GRAD_WIDTH> grad_pack_t;     // 2 gradients packed
+typedef csiir_hls::uint_t<PSRAM_PIXEL_WIDTH> pixel_pack_t;   // 2 pixels packed
+typedef csiir_hls::uint_t<PSRAM_GRAD_WIDTH> grad_pack_t;     // 2 gradients packed
 
 //==============================================================================
 // AXI-Stream Interface Types
 //==============================================================================
 struct axis_pixel_t {
     pixel_t data;
-    ap_uint<1> last;
-    ap_uint<1> user;
+    csiir_hls::uint_t<1> last;
+    csiir_hls::uint_t<1> user;
 };
 
 //==============================================================================
@@ -446,22 +445,22 @@ public:
 // HLS Top Function - AXI-Stream Interface with Register Struct
 //==============================================================================
 void isp_csiir_top(
-    hls::stream<axis_pixel_t> &din_stream,
-    hls::stream<axis_pixel_t> &dout_stream,
+    csiir_hls::stream_t<axis_pixel_t> &din_stream,
+    csiir_hls::stream_t<axis_pixel_t> &dout_stream,
     ISPCSIIR_Regs &regs
 ) {
-    #pragma HLS INTERFACE axis port=din_stream
-    #pragma HLS INTERFACE axis port=dout_stream
-    #pragma HLS INTERFACE s_axilite port=regs bundle=CTRL
-    #pragma HLS INTERFACE s_axilite port=return bundle=CTRL
-    #pragma HLS INTERFACE ap_ctrl_hs port=return
+    CSIIR_HLS_INTERFACE_AXIS(din_stream);
+    CSIIR_HLS_INTERFACE_AXIS(dout_stream);
+    CSIIR_HLS_INTERFACE_AXILITE(regs, CTRL);
+    CSIIR_HLS_INTERFACE_AXILITE(return, CTRL);
+    CSIIR_HLS_INTERFACE_CTRL_HS(return);
 
     // Configure ISPCSIIR instance
     ISPCSIIR isp;
     isp.cfg.img_width = (int)regs.img_width;
     isp.cfg.img_height = (int)regs.img_height;
     for (int i = 0; i < 4; i++) {
-        #pragma HLS UNROLL
+        CSIIR_HLS_UNROLL;
         isp.cfg.win_size_thresh[i] = (int)regs.win_size_thresh[i];
         isp.cfg.win_size_clip_y[i] = (int)regs.win_size_clip_y[i];
         isp.cfg.win_size_clip_sft[i] = (int)regs.win_size_clip_sft[i];
@@ -472,9 +471,9 @@ void isp_csiir_top(
     const int img_width = (int)regs.img_width;
     const int img_height = (int)regs.img_height;
     pixel_t orig_rows[5][MAX_WIDTH];
-    #pragma HLS ARRAY_PARTITION variable=orig_rows dim=1 complete
+    CSIIR_HLS_ARRAY_PARTITION_COMPLETE(orig_rows, 1);
     pixel_t filt_rows[3][MAX_WIDTH];
-    #pragma HLS ARRAY_PARTITION variable=filt_rows dim=1 complete
+    CSIIR_HLS_ARRAY_PARTITION_COMPLETE(filt_rows, 1);
     pixel_t filt_current[MAX_WIDTH];
     pixel_t emit_row[MAX_WIDTH];
     pixel_t patch_u10[PATCH_SIZE];

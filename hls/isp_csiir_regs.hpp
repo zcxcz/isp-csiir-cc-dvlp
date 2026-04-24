@@ -8,31 +8,30 @@
 #ifndef ISP_CSIIR_REGS_HPP
 #define ISP_CSIIR_REGS_HPP
 
-#include <ap_fixed.h>
-#include <ap_int.h>
+#include "csiir_hls_backend.hpp"
 
 //==============================================================================
 // Register Group Struct
 //==============================================================================
 struct ISPCSIIR_Regs {
     // Image dimensions
-    ap_uint<16> img_width;
-    ap_uint<16> img_height;
+    csiir_hls::uint_t<16> img_width;
+    csiir_hls::uint_t<16> img_height;
 
     // Window size thresholds [4]
-    ap_uint<8> win_size_thresh[4];
+    csiir_hls::uint_t<8> win_size_thresh[4];
 
     // Window size LUT outputs [4]
-    ap_uint<8> win_size_clip_y[4];
+    csiir_hls::uint_t<8> win_size_clip_y[4];
 
     // Window size LUT x-node shifts [4]
-    ap_uint<4> win_size_clip_sft[4];
+    csiir_hls::uint_t<4> win_size_clip_sft[4];
 
     // Blending ratios [4]
-    ap_uint<8> blending_ratio[4];
+    csiir_hls::uint_t<8> blending_ratio[4];
 
     // Edge protection
-    ap_uint<8> edge_protect;
+    csiir_hls::uint_t<8> edge_protect;
 
     // Initialize with default values
     void reset() {
