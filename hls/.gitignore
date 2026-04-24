@@ -1,0 +1,11 @@
+# HLS simulation outputs
+*.hex
+*.out
+test_input.hex
+*_output.hex
+
+# Compiled binaries
+hls_top_tb
+
+# Build artifacts
+*.out

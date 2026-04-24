@@ -1,0 +1,10 @@
+.codex
+__pycache__/
+*.pyc
+
+patterns/input/*.hex
+patterns/output/*.hex
+
+hls/hls_top_tb
+hls/*.hex
+hls/test_input.hex

@@ -1,0 +1,22 @@
+{
+  "image_format": {
+    "isp_src_image_format": "BAYER",
+    "isp_src_image_bitwidth": 8,
+    "isp_dst_image_format": "BAYER",
+    "isp_dst_image_bitwidth": 8,
+    "isp_src_image_random_enable": 1
+  },
+  "image_pattern": {
+    "isp_src_image_path": "data/isp_src_image.txt",
+    "isp_src_random_image_path":  "data/isp_src_random_image.txt",
+    "isp_py_crop_output_path":    "data/isp_py_crop_dst_image.txt",
+    "isp_hls_crop_output_path":   "data/isp_hls_crop_dst_image.txt",
+    "isp_py_dpc_output_path":     "data/isp_py_dpc_dst_image.txt",
+    "isp_hls_dpc_output_path":    "data/isp_hls_dpc_dst_image.txt",
+    "isp_py_dpc_src_path":        "data/isp_py_2dfilter_src_image.txt",
+    "isp_hls_dpc_src_path":       "data/isp_hls_2dfilter_src_image.txt",
+    "isp_py_dpc_dst_path":        "data/isp_py_2dfilter_dst_image.txt",
+    "isp_hls_dpc_dst_path":       "data/isp_hls_2dfilter_dst_image.txt",
+    "isp_dst_image_path": "data/isp_dst_image.txt"
+  }
+}

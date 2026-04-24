@@ -1,0 +1,21 @@
+{
+  "reg_image_width": 64,
+  "reg_image_height": 64,
+  "reg_win_size_thresh_0": 16,
+  "reg_win_size_thresh_1": 24,
+  "reg_win_size_thresh_2": 32,
+  "reg_win_size_thresh_3": 40,
+  "reg_win_size_clip_y_0": 15,
+  "reg_win_size_clip_y_1": 23,
+  "reg_win_size_clip_y_2": 31,
+  "reg_win_size_clip_y_3": 39,
+  "reg_win_size_clip_sft_0": 2,
+  "reg_win_size_clip_sft_1": 2,
+  "reg_win_size_clip_sft_2": 2,
+  "reg_win_size_clip_sft_3": 2,
+  "reg_blending_ratio_0": 32,
+  "reg_blending_ratio_1": 32,
+  "reg_blending_ratio_2": 32,
+  "reg_blending_ratio_3": 32,
+  "reg_edge_protect": 32
+}

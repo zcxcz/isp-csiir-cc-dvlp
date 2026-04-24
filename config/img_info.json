@@ -1,0 +1,18 @@
+{
+  "seed": 0,
+  "image": {
+    "width": 64,
+    "height": 64,
+    "bitwidth": 10,
+    "source": "generate",
+    "pattern": "random",
+    "input_path": "patterns/input/csiir_input_seed0.hex"
+  },
+  "generator": {
+    "force_regenerate": true
+  },
+  "outputs": {
+    "py_pattern_path": "patterns/output/csiir_output_py_seed0.hex",
+    "hls_pattern_path": "patterns/output/csiir_output_hls_seed0.hex"
+  }
+}
