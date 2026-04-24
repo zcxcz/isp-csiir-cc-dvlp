@@ -23,6 +23,7 @@ static const int GRAD_WIDTH_I = 14;       // Gradient width
 static const int ACC_WIDTH_I = 20;        // Accumulator width
 static const int SIGNED_WIDTH_I = 11;     // Signed intermediate width
 static const int PATCH_SIZE = 25;         // 5x5 window
+static const int HORIZONTAL_TAP_STEP = 2; // Horizontal sample spacing
 
 static const int MAX_WIDTH = 4096;
 static const int MAX_HEIGHT = 4096;
@@ -144,7 +145,8 @@ public:
                   - window[4] - window[9] - window[14] - window[19] - window[24];
         grad_h = (grad_t)abs(sum_h);
         grad_v = (grad_t)abs(sum_v);
-        grad = (grad_t)(round_div(grad_h, 5) + round_div(grad_v, 5));
+        int grad_i = round_div(grad_h, 5) + round_div(grad_v, 5);
+        grad = (grad_t)clip<int>(grad_i, 0, 127);
     }
 
     //-------------------------------------------------------------------------
@@ -215,61 +217,67 @@ public:
         DirAvgResult result = {};
         int kt = select_kernel_type(win_size);
 
-        // Kernels
-        static const int K2X2[PATCH_SIZE] = {0,0,0,0,0,0,1,2,1,0,0,2,4,2,0,0,1,2,1,0,0,0,0,0,0};
-        static const int K3X3[PATCH_SIZE] = {0,0,0,0,0,0,1,1,1,0,0,1,1,1,0,0,1,1,1,0,0,0,0,0,0};
-        static const int K4X4[PATCH_SIZE] = {1,1,2,1,1,1,2,4,2,1,2,4,8,4,2,1,2,4,2,1,1,1,2,1,1};
-        static const int K5X5[PATCH_SIZE] = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
+        static const int K2_C[PATCH_SIZE] = {0,0,0,0,0,0,1,2,1,0,0,2,4,2,0,0,1,2,1,0,0,0,0,0,0};
+        static const int K2_U[PATCH_SIZE] = {0,0,0,0,0,0,1,1,1,0,0,1,3,1,0,0,0,0,0,0,0,0,0,0,0};
+        static const int K2_D[PATCH_SIZE] = {0,0,0,0,0,0,0,0,0,0,0,1,3,1,0,0,1,1,1,0,0,0,0,0,0};
+        static const int K2_L[PATCH_SIZE] = {0,0,0,0,0,0,1,1,0,0,0,1,3,0,0,0,1,1,0,0,0,0,0,0,0};
+        static const int K2_R[PATCH_SIZE] = {0,0,0,0,0,0,0,1,1,0,0,0,3,1,0,0,0,1,1,0,0,0,0,0,0};
 
-        const int* k0 = nullptr;
-        const int* k1 = nullptr;
+        static const int K3_C[PATCH_SIZE] = {0,0,0,0,0,0,1,2,1,0,0,2,4,2,0,0,1,2,1,0,0,0,0,0,0};
+        static const int K3_U[PATCH_SIZE] = {0,0,0,0,0,0,1,2,1,0,0,1,2,1,0,0,0,0,0,0,0,0,0,0,0};
+        static const int K3_D[PATCH_SIZE] = {0,0,0,0,0,0,0,0,0,0,0,1,2,1,0,0,1,2,1,0,0,0,0,0,0};
+        static const int K3_L[PATCH_SIZE] = {0,0,0,0,0,0,1,1,0,0,0,2,2,0,0,0,1,1,0,0,0,0,0,0,0};
+        static const int K3_R[PATCH_SIZE] = {0,0,0,0,0,0,0,1,1,0,0,0,2,2,0,0,0,1,1,0,0,0,0,0,0};
+
+        static const int K4_C[PATCH_SIZE] = {1,2,2,2,1,2,4,4,4,2,2,4,4,4,2,2,4,4,4,2,1,2,2,2,1};
+        static const int K4_U[PATCH_SIZE] = {1,2,2,2,1,2,2,4,2,2,2,2,4,2,2,0,0,0,0,0,0,0,0,0,0};
+        static const int K4_D[PATCH_SIZE] = {0,0,0,0,0,0,0,0,0,0,2,2,4,2,2,2,2,4,2,2,1,2,2,2,1};
+        static const int K4_L[PATCH_SIZE] = {1,2,2,0,0,2,2,2,0,0,2,4,4,0,0,2,2,2,0,0,1,2,2,0,0};
+        static const int K4_R[PATCH_SIZE] = {0,0,2,2,1,0,0,2,2,2,0,0,4,4,2,0,0,2,2,2,0,0,2,2,1};
+
+        static const int K5_C[PATCH_SIZE] = {1,2,1,2,1,1,1,1,1,1,2,1,2,1,2,1,1,1,1,1,1,2,1,2,1};
+        static const int K5_U[PATCH_SIZE] = {1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0};
+        static const int K5_D[PATCH_SIZE] = {0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1};
+        static const int K5_L[PATCH_SIZE] = {1,1,1,0,0,1,1,1,0,0,1,2,1,0,0,1,1,1,0,0,1,1,1,0,0};
+        static const int K5_R[PATCH_SIZE] = {0,0,1,1,1,0,0,1,1,1,0,0,1,2,1,0,0,1,1,1,0,0,1,1,1};
+
+        const int *avg0_c = nullptr, *avg0_u = nullptr, *avg0_d = nullptr, *avg0_l = nullptr, *avg0_r = nullptr;
+        const int *avg1_c = nullptr, *avg1_u = nullptr, *avg1_d = nullptr, *avg1_l = nullptr, *avg1_r = nullptr;
         switch (kt) {
-            case 0: k0 = nullptr; k1 = K2X2; break;
-            case 1: k0 = K3X3; k1 = K2X2; break;
-            case 2: k0 = K4X4; k1 = K3X3; break;
-            case 3: k0 = K5X5; k1 = K4X4; break;
-            default: k0 = K5X5; k1 = nullptr; break;
+            case 0:
+                avg1_c = K2_C; avg1_u = K2_U; avg1_d = K2_D; avg1_l = K2_L; avg1_r = K2_R;
+                break;
+            case 1:
+                avg0_c = K2_C; avg0_u = K2_U; avg0_d = K2_D; avg0_l = K2_L; avg0_r = K2_R;
+                avg1_c = K3_C; avg1_u = K3_U; avg1_d = K3_D; avg1_l = K3_L; avg1_r = K3_R;
+                break;
+            case 2:
+                avg0_c = K3_C; avg0_u = K3_U; avg0_d = K3_D; avg0_l = K3_L; avg0_r = K3_R;
+                avg1_c = K4_C; avg1_u = K4_U; avg1_d = K4_D; avg1_l = K4_L; avg1_r = K4_R;
+                break;
+            case 3:
+                avg0_c = K4_C; avg0_u = K4_U; avg0_d = K4_D; avg0_l = K4_L; avg0_r = K4_R;
+                avg1_c = K5_C; avg1_u = K5_U; avg1_d = K5_D; avg1_l = K5_L; avg1_r = K5_R;
+                break;
+            default:
+                avg0_c = K5_C; avg0_u = K5_U; avg0_d = K5_D; avg0_l = K5_L; avg0_r = K5_R;
+                break;
         }
 
-        // Direction masks
-        static const int MC[PATCH_SIZE] = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
-        static const int MU[PATCH_SIZE] = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0};
-        static const int MD[PATCH_SIZE] = {0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
-        static const int ML[PATCH_SIZE] = {1,1,1,0,0,1,1,1,0,0,1,1,1,0,0,1,1,1,0,0,1,1,1,0,0};
-        static const int MR[PATCH_SIZE] = {0,0,1,1,1,0,0,1,1,1,0,0,1,1,1,0,0,1,1,1,0,0,1,1,1};
-
-        if (k0) {
-            int mk0_c[PATCH_SIZE], mk0_u[PATCH_SIZE], mk0_d[PATCH_SIZE];
-            int mk0_l[PATCH_SIZE], mk0_r[PATCH_SIZE];
-            for (int i = 0; i < PATCH_SIZE; i++) {
-                mk0_c[i] = k0[i] * MC[i];
-                mk0_u[i] = k0[i] * MU[i];
-                mk0_d[i] = k0[i] * MD[i];
-                mk0_l[i] = k0[i] * ML[i];
-                mk0_r[i] = k0[i] * MR[i];
-            }
-            result.avg0_c = weighted_avg(patch_s11, mk0_c);
-            result.avg0_u = weighted_avg(patch_s11, mk0_u);
-            result.avg0_d = weighted_avg(patch_s11, mk0_d);
-            result.avg0_l = weighted_avg(patch_s11, mk0_l);
-            result.avg0_r = weighted_avg(patch_s11, mk0_r);
+        if (avg0_c) {
+            result.avg0_c = weighted_avg(patch_s11, avg0_c);
+            result.avg0_u = weighted_avg(patch_s11, avg0_u);
+            result.avg0_d = weighted_avg(patch_s11, avg0_d);
+            result.avg0_l = weighted_avg(patch_s11, avg0_l);
+            result.avg0_r = weighted_avg(patch_s11, avg0_r);
         }
 
-        if (k1) {
-            int mk1_c[PATCH_SIZE], mk1_u[PATCH_SIZE], mk1_d[PATCH_SIZE];
-            int mk1_l[PATCH_SIZE], mk1_r[PATCH_SIZE];
-            for (int i = 0; i < PATCH_SIZE; i++) {
-                mk1_c[i] = k1[i] * MC[i];
-                mk1_u[i] = k1[i] * MU[i];
-                mk1_d[i] = k1[i] * MD[i];
-                mk1_l[i] = k1[i] * ML[i];
-                mk1_r[i] = k1[i] * MR[i];
-            }
-            result.avg1_c = weighted_avg(patch_s11, mk1_c);
-            result.avg1_u = weighted_avg(patch_s11, mk1_u);
-            result.avg1_d = weighted_avg(patch_s11, mk1_d);
-            result.avg1_l = weighted_avg(patch_s11, mk1_l);
-            result.avg1_r = weighted_avg(patch_s11, mk1_r);
+        if (avg1_c) {
+            result.avg1_c = weighted_avg(patch_s11, avg1_c);
+            result.avg1_u = weighted_avg(patch_s11, avg1_u);
+            result.avg1_d = weighted_avg(patch_s11, avg1_d);
+            result.avg1_l = weighted_avg(patch_s11, avg1_l);
+            result.avg1_r = weighted_avg(patch_s11, avg1_r);
         }
 
         return result;
@@ -283,52 +291,64 @@ public:
         s11_t blend1;
     };
 
-    void grad_inverse_remap(const int g[5], int inv[5]) {
-        int idx[5] = {0, 1, 2, 3, 4};
-        for (int i = 0; i < 4; i++) {
-            for (int j = 0; j < 4 - i; j++) {
-                if (g[idx[j]] < g[idx[j + 1]]) {
-                    int tmp = idx[j];
-                    idx[j] = idx[j + 1];
-                    idx[j + 1] = tmp;
-                }
-            }
-        }
-        for (int i = 0; i < 5; i++) {
-            inv[idx[4 - i]] = g[idx[i]];
-        }
-    }
-
     FusionResult compute_gradient_fusion(const DirAvgResult& dir_avg,
                                          int grad_u, int grad_d,
                                          int grad_l, int grad_r, int grad_c) {
         FusionResult result;
         int g[5] = {grad_u, grad_d, grad_l, grad_r, grad_c};
-        int inv[5];
-        grad_inverse_remap(g, inv);
+        int v0[5] = {(int)dir_avg.avg0_u, (int)dir_avg.avg0_d, (int)dir_avg.avg0_l,
+                     (int)dir_avg.avg0_r, (int)dir_avg.avg0_c};
+        int v1[5] = {(int)dir_avg.avg1_u, (int)dir_avg.avg1_d, (int)dir_avg.avg1_l,
+                     (int)dir_avg.avg1_r, (int)dir_avg.avg1_c};
 
-        int sum = inv[0] + inv[1] + inv[2] + inv[3] + inv[4];
-
-        int v0[5] = {(int)dir_avg.avg0_c, (int)dir_avg.avg0_u, (int)dir_avg.avg0_d,
-                     (int)dir_avg.avg0_l, (int)dir_avg.avg0_r};
-        int v1[5] = {(int)dir_avg.avg1_c, (int)dir_avg.avg1_u, (int)dir_avg.avg1_d,
-                     (int)dir_avg.avg1_l, (int)dir_avg.avg1_r};
-
-        int total0 = 0, total1 = 0;
-        for (int i = 0; i < 5; i++) {
-            total0 += v0[i] * inv[i];
-            total1 += v1[i] * inv[i];
+        int min0_grad = 2048;
+        int min0_grad_avg = 0;
+        if (g[0] <= min0_grad) {
+            min0_grad = g[0];
+            min0_grad_avg = v0[0];
+        }
+        if (g[2] <= min0_grad) {
+            min0_grad = g[2];
+            min0_grad_avg = round_div(v0[2] + min0_grad_avg + 1, 2);
+        }
+        if (g[4] <= min0_grad) {
+            min0_grad = g[4];
+            min0_grad_avg = round_div(v0[4] + min0_grad_avg + 1, 2);
+        }
+        if (g[3] <= min0_grad) {
+            min0_grad = g[3];
+            min0_grad_avg = round_div(v0[3] + min0_grad_avg + 1, 2);
+        }
+        if (g[1] <= min0_grad) {
+            min0_grad = g[1];
+            min0_grad_avg = round_div(v0[1] + min0_grad_avg + 1, 2);
         }
 
-        if (sum == 0) {
-            int simple_sum0 = v0[0] + v0[1] + v0[2] + v0[3] + v0[4];
-            int simple_sum1 = v1[0] + v1[1] + v1[2] + v1[3] + v1[4];
-            result.blend0 = saturate_s11(round_div(simple_sum0, 5));
-            result.blend1 = saturate_s11(round_div(simple_sum1, 5));
-        } else {
-            result.blend0 = saturate_s11(round_div(total0, sum));
-            result.blend1 = saturate_s11(round_div(total1, sum));
+        int min1_grad = 2048;
+        int min1_grad_avg = 0;
+        if (g[0] <= min1_grad) {
+            min1_grad = g[0];
+            min1_grad_avg = v1[0];
         }
+        if (g[2] <= min1_grad) {
+            min1_grad = g[2];
+            min1_grad_avg = round_div(v1[2] + min1_grad_avg + 1, 2);
+        }
+        if (g[4] <= min1_grad) {
+            min1_grad = g[4];
+            min1_grad_avg = round_div(v1[4] + min1_grad_avg + 1, 2);
+        }
+        if (g[3] <= min1_grad) {
+            min1_grad = g[3];
+            min1_grad_avg = round_div(v1[3] + min1_grad_avg + 1, 2);
+        }
+        if (g[1] <= min1_grad) {
+            min1_grad = g[1];
+            min1_grad_avg = round_div(v1[1] + min1_grad_avg + 1, 2);
+        }
+
+        result.blend0 = saturate_s11(min0_grad_avg);
+        result.blend1 = saturate_s11(min1_grad_avg);
 
         return result;
     }
@@ -362,18 +382,18 @@ public:
         s11_t b0_hor = saturate_s11(round_div((int)ratio * blend0_g + (64 - ratio) * avg0_u, 64));
         s11_t b1_hor = saturate_s11(round_div((int)ratio * blend1_g + (64 - ratio) * avg1_u, 64));
 
-        bool vert_dom = abs(grad_v) > abs(grad_h);
+        bool horiz_dom = abs(grad_v) > abs(grad_h);
 
         // Orientation factor
         static const int F_ORI_V[PATCH_SIZE] = {0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0};
         static const int F_ORI_H[PATCH_SIZE] = {0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0};
-        const int* f_orient = vert_dom ? F_ORI_V : F_ORI_H;
+        const int* f_orient = horiz_dom ? F_ORI_H : F_ORI_V;
 
         // Blend kernels
         static const int F2X2[PATCH_SIZE] = {0,0,0,0,0,0,1,2,1,0,0,2,4,2,0,0,1,2,1,0,0,0,0,0,0};
         static const int F3X3[PATCH_SIZE] = {0,0,0,0,0,0,1,1,1,0,0,1,1,1,0,0,1,1,1,0,0,0,0,0,0};
-        static const int F4X4[PATCH_SIZE] = {1,1,2,1,1,1,2,4,2,1,2,4,8,4,2,1,2,4,2,1,1,1,2,1,1};
-        static const int F5X5[PATCH_SIZE] = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
+        static const int F4X4[PATCH_SIZE] = {1,2,2,2,1,2,4,4,4,2,2,4,4,4,2,2,4,4,4,2,1,2,2,2,1};
+        static const int F5X5[PATCH_SIZE] = {4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4};
 
         s11_t blend0_win[PATCH_SIZE], blend1_win[PATCH_SIZE];
 
@@ -449,399 +469,209 @@ void isp_csiir_top(
     }
     isp.cfg.reg_edge_protect = (int)regs.edge_protect;
 
-    // Local copies of dimensions for use in array indexing
     const int img_width = (int)regs.img_width;
     const int img_height = (int)regs.img_height;
+    pixel_t orig_rows[5][MAX_WIDTH];
+    #pragma HLS ARRAY_PARTITION variable=orig_rows dim=1 complete
+    pixel_t filt_rows[3][MAX_WIDTH];
+    #pragma HLS ARRAY_PARTITION variable=filt_rows dim=1 complete
+    pixel_t filt_current[MAX_WIDTH];
+    pixel_t emit_row[MAX_WIDTH];
+    pixel_t patch_u10[PATCH_SIZE];
+    s11_t patch_s11[PATCH_SIZE];
+    int grad_row_buf[2][MAX_WIDTH];
+    int grad_shift[3];
+    int orig_row_ids[5];
+    int filt_row_ids[3];
 
-    // Line buffer for ORIGINAL image (4 rows, used by gradient + stage2)
-    // Stores raw input pixels - never modified during feedback
-    pixel_pack_t line_buf_src[4][MAX_WIDTH];
-    #pragma HLS ARRAY_PARTITION variable=line_buf_src dim=1 complete
-    #pragma HLS RESOURCE variable=line_buf_src core=RAM_1P_BRAM
-
-    // Line buffer for FILTERED image (5 rows, used by stage4 feedback + subsequent pixels)
-    // Updated with filtered values as pixels are processed
-    pixel_pack_t line_buf_filt[5][MAX_WIDTH];
-    #pragma HLS ARRAY_PARTITION variable=line_buf_filt dim=1 complete
-    #pragma HLS RESOURCE variable=line_buf_filt core=RAM_1P_BRAM
-
-    // Column shift register for ORIGINAL data (for gradient window)
-    pixel_t col_src[5][5];
-    #pragma HLS ARRAY_PARTITION variable=col_src complete
-
-    // Column shift register for FILTERED data (for stage4 IIR blend window)
-    pixel_t col_filt[5][5];
-    #pragma HLS ARRAY_PARTITION variable=col_filt complete
-
-    grad_pack_t grad_buf_pack[2][MAX_WIDTH];
-    #pragma HLS ARRAY_PARTITION variable=grad_buf_pack dim=1 complete
-    #pragma HLS RESOURCE variable=grad_buf_pack core=RAM_1P_BRAM
-
-    grad_t grad_shift[3];
-    #pragma HLS ARRAY_PARTITION variable=grad_shift complete
-
-    grad_t grad_next_row_delay[MAX_WIDTH];
-    #pragma HLS RESOURCE variable=grad_next_row_delay core=RAM_1P_BRAM
-
-    // Gradient window: built from original line buffer
-    // Used by stage1 (gradient), stage2 (directional avg)
-    // Note: stage4's IIR blend uses col_filt instead (filtered data)
-    pixel_t src_5x5[5][5];
-    #pragma HLS ARRAY_PARTITION variable=src_5x5 complete
-
-    s11_t src_s11_5x5[PATCH_SIZE];
-    #pragma HLS ARRAY_PARTITION variable=src_s11_5x5 complete
-
-    grad_t current_grad = 0;
-    grad_t grad_u, grad_d, grad_l, grad_r;
-
-    // 2-cycle delay buffer for grad values (to get grad_r)
-    grad_t grad_delay_buf[2][MAX_WIDTH];
-    #pragma HLS ARRAY_PARTITION variable=grad_delay_buf dim=1 complete
-    #pragma HLS RESOURCE variable=grad_delay_buf core=RAM_2P_BRAM
-
-    // Delayed stage2 results (need to store for 2 cycles)
-    ISPCSIIR::DirAvgResult dir_avg_delay[2];
-    #pragma HLS ARRAY_PARTITION variable=dir_avg_delay complete
-
-    // Delayed coordinates and win_size
-    unsigned int delay_row[2];
-    unsigned int delay_col[2];
-    int delay_win_size[2];
-    #pragma HLS ARRAY_PARTITION variable=delay_row complete
-    #pragma HLS ARRAY_PARTITION variable=delay_col complete
-    #pragma HLS ARRAY_PARTITION variable=delay_win_size complete
-
-    // Delayed fusion results
-    ISPCSIIR::FusionResult delay_fusion[2];
-    #pragma HLS ARRAY_PARTITION variable=delay_fusion complete
-
-    // Delayed filt_5x5 for stage4
-    s11_t delay_filt_5x5[2][PATCH_SIZE];
-    #pragma HLS ARRAY_PARTITION variable=delay_filt_5x5 complete
-
-    // Delayed grad_h, grad_v for stage4
-    grad_t delay_grad_h[2];
-    grad_t delay_grad_v[2];
-    #pragma HLS ARRAY_PARTITION variable=delay_grad_h complete
-    #pragma HLS ARRAY_PARTITION variable=delay_grad_v complete
-
-    unsigned int total_pixels = (unsigned int)img_width * (unsigned int)img_height;
-
-    // Initialize original line buffer
-    for (int i = 0; i < 4; i++) {
-        for (int j = 0; j < MAX_WIDTH; j++) {
-            #pragma HLS UNROLL factor=4
-            line_buf_src[i][j] = 0;
-        }
-    }
-    // Initialize filtered line buffer
     for (int i = 0; i < 5; i++) {
-        for (int j = 0; j < MAX_WIDTH; j++) {
-            #pragma HLS UNROLL factor=4
-            line_buf_filt[i][j] = 0;
+        orig_row_ids[i] = -1;
+    }
+    for (int i = 0; i < 3; i++) {
+        filt_row_ids[i] = -1;
+    }
+    for (int row = 0; row < 2; row++) {
+        for (int x = 0; x < img_width; x++) {
+            grad_row_buf[row][x] = 0;
         }
     }
-    // Initialize column shift registers
-    for (int i = 0; i < 5; i++) {
-        for (int j = 0; j < 5; j++) {
-            col_src[i][j] = 0;
-            col_filt[i][j] = 0;
-        }
-    }
-    for (int i = 0; i < 5; i++) {
-        for (int j = 0; j < 5; j++) {
-            col_src[i][j] = 0;
-            col_filt[i][j] = 0;
-        }
-    }
-    for (int i = 0; i < 2; i++) {
-        for (int j = 0; j < MAX_WIDTH; j++) {
-            #pragma HLS UNROLL factor=4
-            grad_buf_pack[i][j] = 0;
-        }
-    }
-    for (int j = 0; j < 3; j++) {
-        grad_shift[j] = 0;
-    }
-    for (int j = 0; j < MAX_WIDTH; j++) {
-        #pragma HLS UNROLL factor=4
-        grad_next_row_delay[j] = 0;
-    }
-    // Initialize delay buffers
-    for (int i = 0; i < 2; i++) {
-        delay_row[i] = 0;
-        delay_col[i] = 0;
-        delay_win_size[i] = 0;
-        delay_grad_h[i] = 0;
-        delay_grad_v[i] = 0;
-        for (int j = 0; j < PATCH_SIZE; j++) {
-            delay_filt_5x5[i][j] = 0;
-        }
-    }
-    dir_avg_delay[0].avg0_c = 0; dir_avg_delay[0].avg0_u = 0; dir_avg_delay[0].avg0_d = 0;
-    dir_avg_delay[0].avg0_l = 0; dir_avg_delay[0].avg0_r = 0;
-    dir_avg_delay[0].avg1_c = 0; dir_avg_delay[0].avg1_u = 0; dir_avg_delay[0].avg1_d = 0;
-    dir_avg_delay[0].avg1_l = 0; dir_avg_delay[0].avg1_r = 0;
-    dir_avg_delay[1].avg0_c = 0; dir_avg_delay[1].avg0_u = 0; dir_avg_delay[1].avg0_d = 0;
-    dir_avg_delay[1].avg0_l = 0; dir_avg_delay[1].avg0_r = 0;
-    dir_avg_delay[1].avg1_c = 0; dir_avg_delay[1].avg1_u = 0; dir_avg_delay[1].avg1_d = 0;
-    dir_avg_delay[1].avg1_l = 0; dir_avg_delay[1].avg1_r = 0;
-    delay_fusion[0].blend0 = 0; delay_fusion[0].blend1 = 0;
-    delay_fusion[1].blend0 = 0; delay_fusion[1].blend1 = 0;
+    grad_shift[0] = 0;
+    grad_shift[1] = 0;
+    grad_shift[2] = 0;
 
-    // Main processing loop - streaming pixel-by-pixel
-    for (unsigned int pixel_idx = 0; pixel_idx < total_pixels; pixel_idx++) {
-        #pragma HLS PIPELINE II=1 rewind
-
-        unsigned int row_val = pixel_idx / (unsigned int)img_width;
-        unsigned int col_val = pixel_idx % (unsigned int)img_width;
-
-        // Read input pixel from stream
-        axis_pixel_t din = din_stream.read();
-
-        //======================================================================
-        // Update ORIGINAL line buffer (4 rows, for gradient/stage2)
-        //======================================================================
-        // Shift col_src register right (col_src[r][c] <- col_src[r][c+1])
-        for (int r = 0; r < 5; r++) {
-            #pragma HLS UNROLL
-            for (int c = 0; c < 4; c++) {
-                #pragma HLS UNROLL
-                col_src[r][c] = col_src[r][c+1];
+    auto find_orig_slot = [&](int row) -> int {
+        for (int i = 0; i < 5; i++) {
+            if (orig_row_ids[i] == row) {
+                return i;
             }
         }
+        return -1;
+    };
 
-        // Read old rows from original line buffer
-        pixel_pack_t src_old_row0_pack = line_buf_src[0][col_val];
-        pixel_pack_t src_old_row1_pack = line_buf_src[1][col_val];
-        pixel_pack_t src_old_row2_pack = line_buf_src[2][col_val];
-        pixel_pack_t src_old_row3_pack = line_buf_src[3][col_val];
-
-        pixel_t src_old_row0 = (pixel_t)src_old_row0_pack.range(9, 0).to_int();
-        pixel_t src_old_row1 = (pixel_t)src_old_row1_pack.range(9, 0).to_int();
-        pixel_t src_old_row2 = (pixel_t)src_old_row2_pack.range(9, 0).to_int();
-        pixel_t src_old_row3 = (pixel_t)src_old_row3_pack.range(9, 0).to_int();
-
-        // Shift original line buffer down: row0<-row1<-row2<-row3<-din
-        line_buf_src[0][col_val] = (pixel_pack_t)src_old_row1 << 0 | (pixel_pack_t)src_old_row0 << 10;
-        line_buf_src[1][col_val] = (pixel_pack_t)src_old_row2 << 0 | (pixel_pack_t)src_old_row1 << 10;
-        line_buf_src[2][col_val] = (pixel_pack_t)src_old_row3 << 0 | (pixel_pack_t)src_old_row2 << 10;
-        line_buf_src[3][col_val] = (pixel_pack_t)din.data       << 0 | (pixel_pack_t)src_old_row3 << 10;
-
-        // Load new pixel into col_src (the "5th" row of the shift register)
-        col_src[0][4] = src_old_row0;
-        col_src[1][4] = src_old_row1;
-        col_src[2][4] = src_old_row2;
-        col_src[3][4] = src_old_row3;
-        col_src[4][4] = din.data;
-
-        //======================================================================
-        // Update FILTERED line buffer (5 rows, for stage4 feedback)
-        //======================================================================
-        // Shift col_filt register right (col_filt[r][c] <- col_filt[r][c+1])
-        for (int r = 0; r < 5; r++) {
-            #pragma HLS UNROLL
-            for (int c = 0; c < 4; c++) {
-                #pragma HLS UNROLL
-                col_filt[r][c] = col_filt[r][c+1];
+    auto find_filt_slot = [&](int row) -> int {
+        for (int i = 0; i < 3; i++) {
+            if (filt_row_ids[i] == row) {
+                return i;
             }
         }
+        return -1;
+    };
 
-        // Read old rows from filtered line buffer
-        pixel_pack_t filt_old_row0_pack = line_buf_filt[0][col_val];
-        pixel_pack_t filt_old_row1_pack = line_buf_filt[1][col_val];
-        pixel_pack_t filt_old_row2_pack = line_buf_filt[2][col_val];
-        pixel_pack_t filt_old_row3_pack = line_buf_filt[3][col_val];
-        pixel_pack_t filt_old_row4_pack = line_buf_filt[4][col_val];
+    auto get_orig_pixel = [&](int row, int col) -> pixel_t {
+        int y = clip<int>(row, 0, img_height - 1);
+        int x = clip<int>(col, 0, img_width - 1);
+        int slot = find_orig_slot(y);
+        return (slot >= 0) ? orig_rows[slot][x] : pixel_t(0);
+    };
 
-        pixel_t filt_old_row0 = (pixel_t)filt_old_row0_pack.range(9, 0).to_int();
-        pixel_t filt_old_row1 = (pixel_t)filt_old_row1_pack.range(9, 0).to_int();
-        pixel_t filt_old_row2 = (pixel_t)filt_old_row2_pack.range(9, 0).to_int();
-        pixel_t filt_old_row3 = (pixel_t)filt_old_row3_pack.range(9, 0).to_int();
-        pixel_t filt_old_row4 = (pixel_t)filt_old_row4_pack.range(9, 0).to_int();
+    auto get_filt_pixel = [&](int row, int col, int current_row) -> pixel_t {
+        int y = clip<int>(row, 0, img_height - 1);
+        int x = clip<int>(col, 0, img_width - 1);
+        if (y == current_row) {
+            return filt_current[x];
+        }
+        int slot = find_filt_slot(y);
+        return (slot >= 0) ? filt_rows[slot][x] : get_orig_pixel(y, x);
+    };
 
-        // Shift filtered line buffer: rows shift down, current pixel filtered
-        // value will be written AFTER computation (see below)
-        line_buf_filt[0][col_val] = (pixel_pack_t)filt_old_row1 << 0 | (pixel_pack_t)filt_old_row0 << 10;
-        line_buf_filt[1][col_val] = (pixel_pack_t)filt_old_row2 << 0 | (pixel_pack_t)filt_old_row1 << 10;
-        line_buf_filt[2][col_val] = (pixel_pack_t)filt_old_row3 << 0 | (pixel_pack_t)filt_old_row2 << 10;
-        line_buf_filt[3][col_val] = (pixel_pack_t)filt_old_row4 << 0 | (pixel_pack_t)filt_old_row3 << 10;
-        // line_buf_filt[4] will be updated with dout_pixel AFTER computation
+    auto build_orig_window = [&](int center_x, int center_y, pixel_t patch[PATCH_SIZE]) {
+        for (int dy = -2; dy <= 2; dy++) {
+            for (int dx = -2; dx <= 2; dx++) {
+                int patch_idx = (dy + 2) * 5 + (dx + 2);
+                patch[patch_idx] = get_orig_pixel(center_y + dy, center_x + dx * HORIZONTAL_TAP_STEP);
+            }
+        }
+    };
 
-        // Load col_filt register: col_filt[r][4] = filtered value at (col_val, row_val-r)
-        // Rows 0-3: previously filtered pixels (already shifted from previous col)
-        // Row 4: placeholders (current pixel hasn't been processed yet)
-        col_filt[0][4] = filt_old_row0;  // (col_val, row-0) = filtered from prev col in same row
-        col_filt[1][4] = filt_old_row1;  // (col_val, row-1)
-        col_filt[2][4] = filt_old_row2;  // (col_val, row-2)
-        col_filt[3][4] = filt_old_row3;  // (col_val, row-3)
-        col_filt[4][4] = din.data;       // (col_val, row-4) = orig for now, updated after
+    auto build_stage4_window = [&](int center_x, int center_y, pixel_t patch[PATCH_SIZE]) {
+        for (int dy = -2; dy <= 2; dy++) {
+            for (int dx = -2; dx <= 2; dx++) {
+                int patch_idx = (dy + 2) * 5 + (dx + 2);
+                int tap_x = center_x + dx * HORIZONTAL_TAP_STEP;
+                patch[patch_idx] = (dy < 0)
+                    ? get_filt_pixel(center_y + dy, tap_x, center_y)
+                    : get_orig_pixel(center_y + dy, tap_x);
+            }
+        }
+    };
 
-        //======================================================================
-        // Build gradient window from ORIGINAL line buffer (for stage1/stage2)
-        //======================================================================
-        for (int r = 0; r < 5; r++) {
-            #pragma HLS UNROLL
-            for (int c = 0; c < 5; c++) {
-                #pragma HLS UNROLL
-                int win_col = (int)col_val - 2 + c;
-                if (c < 3) {
-                    // col_src[r][c+2]: from shift register (columns col_val-1, col_val, col_val+1)
-                    src_5x5[r][c] = col_src[r][c + 2];
-                } else {
-                    // col_src from line buffer
-                    if (win_col < 0) {
-                        src_5x5[r][c] = line_buf_src[r < 4 ? r : 3][0].range(9, 0);
-                    } else if (win_col >= (int)img_width) {
-                        src_5x5[r][c] = line_buf_src[r < 4 ? r : 3][(int)img_width - 1].range(9, 0);
-                    } else {
-                        src_5x5[r][c] = line_buf_src[r < 4 ? r : 3][win_col].range(9, 0);
-                    }
+    auto emit_output_row = [&](int row) {
+        for (int x = 0; x < img_width; x++) {
+            axis_pixel_t dout;
+            dout.data = emit_row[x];
+            dout.user = (row == 0 && x == 0) ? 1 : 0;
+            dout.last = (row == img_height - 1 && x == img_width - 1) ? 1 : 0;
+            dout_stream.write(dout);
+        }
+    };
+
+    auto process_row = [&](int target_row) {
+        for (int x = 0; x < img_width; x++) {
+            filt_current[x] = get_orig_pixel(target_row, x);
+        }
+
+        for (int x = 0; x < img_width; x++) {
+            pixel_t center_patch[PATCH_SIZE];
+            pixel_t left_patch[PATCH_SIZE];
+            pixel_t right_patch[PATCH_SIZE];
+
+            build_orig_window(x, target_row, center_patch);
+            build_orig_window(x - HORIZONTAL_TAP_STEP, target_row, left_patch);
+            build_orig_window(x + HORIZONTAL_TAP_STEP, target_row, right_patch);
+
+            grad_t grad_h, grad_v, grad_c_u14;
+            grad_t grad_tmp_h, grad_tmp_v, grad_l_u14, grad_r_u14;
+            isp.sobel_gradient_5x5(center_patch, grad_h, grad_v, grad_c_u14);
+            isp.sobel_gradient_5x5(left_patch, grad_tmp_h, grad_tmp_v, grad_l_u14);
+            isp.sobel_gradient_5x5(right_patch, grad_tmp_h, grad_tmp_v, grad_r_u14);
+
+            for (int i = 0; i < PATCH_SIZE; i++) {
+                patch_s11[i] = u10_to_s11(center_patch[i]);
+            }
+
+            int grad_c = (int)grad_c_u14;
+            int grad_l = (x > 0) ? (int)grad_l_u14 : grad_c;
+            int grad_r = (x < img_width - 1) ? (int)grad_r_u14 : grad_c;
+            int grad_u = (target_row > 0) ? grad_shift[1] : grad_c;
+            int grad_d = (target_row < img_height - 1) ? grad_row_buf[0][x] : grad_c;
+
+            grad_shift[0] = grad_shift[1];
+            grad_shift[1] = grad_shift[2];
+            grad_shift[2] = grad_c;
+            grad_row_buf[0][x] = grad_c;
+            grad_row_buf[1][x] = grad_row_buf[0][x];
+
+            int grad_triplet_max = grad_l;
+            if (grad_c > grad_triplet_max) grad_triplet_max = grad_c;
+            if (grad_r > grad_triplet_max) grad_triplet_max = grad_r;
+            int win_size = isp.lut_win_size(grad_triplet_max);
+
+            ISPCSIIR::DirAvgResult dir_avg = isp.compute_directional_avg(patch_s11, win_size);
+            ISPCSIIR::FusionResult fusion = isp.compute_gradient_fusion(
+                dir_avg, grad_u, grad_d, grad_l, grad_r, grad_c
+            );
+
+            build_stage4_window(x, target_row, patch_u10);
+            for (int i = 0; i < PATCH_SIZE; i++) {
+                patch_s11[i] = u10_to_s11(patch_u10[i]);
+            }
+
+            s11_t final_patch[PATCH_SIZE];
+            isp.compute_iir_blend(
+                patch_s11,
+                win_size,
+                fusion.blend0,
+                fusion.blend1,
+                dir_avg.avg0_u,
+                dir_avg.avg1_u,
+                (int)grad_h,
+                (int)grad_v,
+                final_patch
+            );
+            filt_current[x] = s11_to_u10(final_patch[12]);
+        }
+
+        int slot = target_row % 3;
+        filt_row_ids[slot] = target_row;
+        for (int x = 0; x < img_width; x++) {
+            filt_rows[slot][x] = filt_current[x];
+        }
+    };
+
+    for (int row = 0; row < img_height; row++) {
+        int slot = row % 5;
+        orig_row_ids[slot] = row;
+        for (int x = 0; x < img_width; x++) {
+            axis_pixel_t din = din_stream.read();
+            orig_rows[slot][x] = din.data;
+        }
+
+        if (row >= 2) {
+            int target_row = row - 2;
+            process_row(target_row);
+            if (target_row < 2) {
+                int emit_slot = find_orig_slot(target_row);
+                for (int x = 0; x < img_width; x++) {
+                    emit_row[x] = orig_rows[emit_slot][x];
+                }
+            } else {
+                for (int x = 0; x < img_width; x++) {
+                    emit_row[x] = filt_current[x];
                 }
             }
+            emit_output_row(target_row);
         }
+    }
 
-        //======================================================================
-        // Stage 1: Sobel Gradient (reads ORIGINAL data)
-        //======================================================================
-        grad_t grad_h, grad_v, grad;
-        isp.sobel_gradient_5x5(&src_5x5[0][0], grad_h, grad_v, grad);
-
-        // Convert gradient window to s11 for stage2
-        for (int i = 0; i < PATCH_SIZE; i++) {
-            src_s11_5x5[i] = u10_to_s11(src_5x5[i / 5][i % 5]);
+    for (int target_row = img_height - 2; target_row < img_height; target_row++) {
+        if (target_row < 0) {
+            continue;
         }
-
-        // Read grad_l BEFORE computing win_size (grad_l = grad(i-2,j) from shift register)
-        // At pixel (i,j), BEFORE shift: grad_shift[0]=grad(i-3), grad_shift[1]=grad(i-2), grad_shift[2]=grad(i-1)
-        grad_t grad_l_for_win = grad_shift[1];  // grad(i-2,j)
-
-        // Compute win_size using max(grad_l, grad_c) - grad_r not available yet
-        int win_size = isp.lut_win_size((int)((grad_l_for_win > grad) ? grad_l_for_win : grad));
-
-        //======================================================================
-        // Stage 2: Directional Average (reads ORIGINAL data)
-        //======================================================================
-        ISPCSIIR::DirAvgResult dir_avg = isp.compute_directional_avg(src_s11_5x5, win_size);
-
-        //======================================================================
-        // Stage 3: Gradient Fusion - neighbor gradients
-        //======================================================================
-        grad_t grad_next_row = grad_next_row_delay[col_val];
-
-        grad_u = (grad_t)grad_buf_pack[0][col_val].range(13, 0);
-        // grad_l from shift register BEFORE update: grad_shift[0] = grad(i-2,j)
-        grad_l = grad_l_for_win;
-        grad_t grad_c = grad;
-        grad_d = grad_next_row;
-        // grad_r approximation: use current grad (will be refined in delayed output)
-        grad_r = grad;
-
-        // Update shift register AFTER reading grad_l
-        grad_shift[0] = grad_shift[1];
-        grad_shift[1] = grad_shift[2];
-        grad_shift[2] = grad;
-
-        grad_buf_pack[0][col_val] = (grad_pack_t)grad << 0 | (grad_pack_t)grad_buf_pack[1][col_val].range(13, 0).to_int();
-        grad_buf_pack[1][col_val] = (grad_pack_t)grad << 0 | (grad_pack_t)grad_next_row << 14;
-
-        grad_next_row_delay[col_val] = current_grad;
-
-        ISPCSIIR::FusionResult fusion = isp.compute_gradient_fusion(dir_avg,
-            (int)grad_u, (int)grad_d, (int)grad_l, (int)grad_r, (int)grad_c);
-
-        //======================================================================
-        // Stage 4: IIR Blend
-        // - grad/stage2 read src_s11_5x5 (ORIGINAL data)
-        // - stage4 reads col_filt for filtered neighborhood
-        //======================================================================
-        // Build stage4's 5x5 window from filtered line buffer:
-        //   Rows 0-3: from col_filt (filtered data from previous columns)
-        //   Row 4: from col_src (original data for current row, to be replaced by filtered)
-        s11_t filt_5x5[PATCH_SIZE];
-        for (int r = 0; r < 5; r++) {
-            #pragma HLS UNROLL
-            for (int c = 0; c < 5; c++) {
-                #pragma HLS UNROLL
-                int win_col = (int)col_val - 2 + c;
-                int patch_idx = r * 5 + c;
-                if (r < 4) {
-                    // Rows 0-3: from filtered col_filt
-                    if (c < 3) {
-                        filt_5x5[patch_idx] = u10_to_s11(col_filt[r][c + 2]);
-                    } else {
-                        if (win_col < 0) {
-                            filt_5x5[patch_idx] = u10_to_s11(line_buf_filt[r][0].range(9, 0));
-                        } else if (win_col >= (int)img_width) {
-                            filt_5x5[patch_idx] = u10_to_s11(line_buf_filt[r][(int)img_width - 1].range(9, 0));
-                        } else {
-                            filt_5x5[patch_idx] = u10_to_s11(line_buf_filt[r][win_col].range(9, 0));
-                        }
-                    }
-                } else {
-                    // Row 4: original data (for boundary extension logic)
-                    if (c < 3) {
-                        filt_5x5[patch_idx] = u10_to_s11(col_src[4][c + 2]);
-                    } else {
-                        if (win_col < 0) {
-                            filt_5x5[patch_idx] = u10_to_s11(line_buf_src[3][0].range(9, 0));
-                        } else if (win_col >= (int)img_width) {
-                            filt_5x5[patch_idx] = u10_to_s11(line_buf_src[3][(int)img_width - 1].range(9, 0));
-                        } else {
-                            filt_5x5[patch_idx] = u10_to_s11(line_buf_src[3][win_col].range(9, 0));
-                        }
-                    }
-                }
-            }
+        process_row(target_row);
+        for (int x = 0; x < img_width; x++) {
+            emit_row[x] = filt_current[x];
         }
-
-        // Store values for potential delayed output
-        delay_grad_h[0] = grad_h;
-        delay_grad_v[0] = grad_v;
-        delay_fusion[0] = fusion;
-        delay_win_size[0] = win_size;
-        delay_row[0] = row_val;
-        delay_col[0] = col_val;
-        dir_avg_delay[0] = dir_avg;
-
-        s11_t final_patch[PATCH_SIZE];
-        // Always use current values for now (output at same position as gradient)
-        isp.compute_iir_blend(filt_5x5, win_size, fusion.blend0, fusion.blend1,
-                              dir_avg.avg0_u, dir_avg.avg1_u,
-                              (int)grad_h, (int)grad_v, final_patch);
-
-        pixel_t dout_pixel;
-
-        // Boundary handling: rows 0-1 output original input (passthrough)
-        // This matches Python behavior where rows 0-1 are copied from input
-        if (row_val < 2) {
-            // For boundary rows, output original pixel directly
-            dout_pixel = din.data;
-        } else {
-            // For rows 2+, output filtered result
-            dout_pixel = s11_to_u10(final_patch[12]);
-        }
-        // Update line_buf_filt[4] with filtered value for current position
-        // This makes the filtered value available for subsequent pixel processing
-        pixel_pack_t filt_row4_pack = line_buf_filt[4][col_val];
-        pixel_t filt_row4_even = (pixel_t)filt_row4_pack.range(9, 0).to_int();
-        line_buf_filt[4][col_val] = (pixel_pack_t)dout_pixel << 0 | (pixel_pack_t)filt_row4_even << 10;
-        // Also update col_filt[4][4] so the next column sees the filtered value
-        col_filt[4][4] = dout_pixel;
-
-                //======================================================================
-        // Output
-        //======================================================================
-        axis_pixel_t dout;
-        dout.data = dout_pixel;
-        dout.last = (row_val == (unsigned int)img_height - 1 && col_val == (unsigned int)img_width - 1) ? 1 : 0;
-        dout.user = (row_val == 0 && col_val == 0) ? 1 : 0;
-
-        // Output current pixel (filtered value)
-        dout_stream.write(dout);
-
-        current_grad = grad;
+        emit_output_row(target_row);
     }
 }
 
