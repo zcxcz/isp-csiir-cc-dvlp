@@ -11,6 +11,9 @@
 #define ISP_CSIIR_HLS_TOP_HPP
 
 #include <cstring>
+#ifndef __SYNTHESIS__
+#include <vector>
+#endif
 #include "csiir_hls_backend.hpp"
 #include "isp_csiir_regs.hpp"
 
@@ -48,6 +51,49 @@ struct axis_pixel_t {
     csiir_hls::uint_t<1> last;
     csiir_hls::uint_t<1> user;
 };
+
+#ifndef __SYNTHESIS__
+namespace csiir_debug {
+
+struct Stage4InputTraceEntry {
+    int idx;
+    int center_x;
+    int center_y;
+    int win_size;
+    int grad_h;
+    int grad_v;
+    int blend0;
+    int blend1;
+    int avg0_u;
+    int avg1_u;
+    int src_patch_u10[PATCH_SIZE];
+};
+
+struct FeedbackCommitTraceEntry {
+    int idx;
+    int center_x;
+    int center_y;
+    int write_xs[5];
+    int columns_u10[5][5];
+};
+
+struct TraceStore {
+    std::vector<Stage4InputTraceEntry> stage4_input_trace;
+    std::vector<FeedbackCommitTraceEntry> feedback_commit_trace;
+};
+
+static TraceStore* g_trace_store = nullptr;
+
+inline void set_trace_store(TraceStore* store) {
+    g_trace_store = store;
+}
+
+inline void clear_trace_store() {
+    g_trace_store = nullptr;
+}
+
+}  // namespace csiir_debug
+#endif
 
 //==============================================================================
 // Configuration Structure
@@ -615,6 +661,26 @@ void isp_csiir_top(
                 patch_s11[i] = u10_to_s11(patch_u10[i]);
             }
 
+#ifndef __SYNTHESIS__
+            if (csiir_debug::g_trace_store != nullptr) {
+                csiir_debug::Stage4InputTraceEntry entry;
+                entry.idx = (int)csiir_debug::g_trace_store->stage4_input_trace.size();
+                entry.center_x = x;
+                entry.center_y = target_row;
+                entry.win_size = win_size;
+                entry.grad_h = abs((int)grad_h);
+                entry.grad_v = abs((int)grad_v);
+                entry.blend0 = fusion.blend0;
+                entry.blend1 = fusion.blend1;
+                entry.avg0_u = dir_avg.avg0_u;
+                entry.avg1_u = dir_avg.avg1_u;
+                for (int i = 0; i < PATCH_SIZE; i++) {
+                    entry.src_patch_u10[i] = (int)patch_u10[i];
+                }
+                csiir_debug::g_trace_store->stage4_input_trace.push_back(entry);
+            }
+#endif
+
             s11_t final_patch[PATCH_SIZE];
             isp.compute_iir_blend(
                 patch_s11,
@@ -627,6 +693,22 @@ void isp_csiir_top(
                 (int)grad_v,
                 final_patch
             );
+
+#ifndef __SYNTHESIS__
+            if (csiir_debug::g_trace_store != nullptr) {
+                csiir_debug::FeedbackCommitTraceEntry entry;
+                entry.idx = (int)csiir_debug::g_trace_store->feedback_commit_trace.size();
+                entry.center_x = x;
+                entry.center_y = target_row;
+                for (int col = 0; col < 5; col++) {
+                    entry.write_xs[col] = clip<int>(x + (col - 2) * HORIZONTAL_TAP_STEP, 0, img_width - 1);
+                    for (int row = 0; row < 5; row++) {
+                        entry.columns_u10[col][row] = (int)s11_to_u10(final_patch[row * 5 + col]);
+                    }
+                }
+                csiir_debug::g_trace_store->feedback_commit_trace.push_back(entry);
+            }
+#endif
             filt_current[x] = s11_to_u10(final_patch[12]);
         }
 

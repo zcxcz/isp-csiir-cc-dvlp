@@ -13,6 +13,10 @@
   },
   "outputs": {
     "py_pattern_path": "patterns/output/csiir_output_py_seed0.hex",
-    "hls_pattern_path": "patterns/output/csiir_output_hls_seed0.hex"
+    "hls_pattern_path": "patterns/output/csiir_output_hls_seed0.hex",
+    "py_stage4_input_trace_path": "patterns/output/csiir_stage4_input_py_seed0.jsonl",
+    "hls_stage4_input_trace_path": "patterns/output/csiir_stage4_input_hls_seed0.jsonl",
+    "py_feedback_commit_trace_path": "patterns/output/csiir_feedback_commit_py_seed0.jsonl",
+    "hls_feedback_commit_trace_path": "patterns/output/csiir_feedback_commit_hls_seed0.jsonl"
   }
 }

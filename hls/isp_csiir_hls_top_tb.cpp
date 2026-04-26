@@ -156,7 +156,104 @@ struct ImgInfo {
     int height;
     string input_path;
     string hls_output_path;
+    string hls_stage4_input_trace_path;
+    string hls_feedback_commit_trace_path;
 };
+
+void save_stage4_input_trace(
+    const string& filename,
+    const vector<csiir_debug::Stage4InputTraceEntry>& entries
+) {
+    if (filename.empty()) {
+        return;
+    }
+    filesystem::path path(filename);
+    if (path.has_parent_path()) {
+        filesystem::create_directories(path.parent_path());
+    }
+    ofstream f(filename.c_str());
+    if (!f.is_open()) {
+        throw runtime_error("Cannot open stage4 trace file: " + filename);
+    }
+    for (size_t i = 0; i < entries.size(); i++) {
+        const auto& entry = entries[i];
+        f << "{";
+        f << "\"idx\":" << entry.idx << ",";
+        f << "\"center_x\":" << entry.center_x << ",";
+        f << "\"center_y\":" << entry.center_y << ",";
+        f << "\"win_size\":" << entry.win_size << ",";
+        f << "\"grad_h\":" << entry.grad_h << ",";
+        f << "\"grad_v\":" << entry.grad_v << ",";
+        f << "\"blend0\":" << entry.blend0 << ",";
+        f << "\"blend1\":" << entry.blend1 << ",";
+        f << "\"avg0_u\":" << entry.avg0_u << ",";
+        f << "\"avg1_u\":" << entry.avg1_u << ",";
+        f << "\"src_patch_u10\":[";
+        for (int row = 0; row < 5; row++) {
+            if (row != 0) {
+                f << ",";
+            }
+            f << "[";
+            for (int col = 0; col < 5; col++) {
+                if (col != 0) {
+                    f << ",";
+                }
+                f << entry.src_patch_u10[row * 5 + col];
+            }
+            f << "]";
+        }
+        f << "]";
+        f << "}\n";
+    }
+}
+
+void save_feedback_commit_trace(
+    const string& filename,
+    const vector<csiir_debug::FeedbackCommitTraceEntry>& entries
+) {
+    if (filename.empty()) {
+        return;
+    }
+    filesystem::path path(filename);
+    if (path.has_parent_path()) {
+        filesystem::create_directories(path.parent_path());
+    }
+    ofstream f(filename.c_str());
+    if (!f.is_open()) {
+        throw runtime_error("Cannot open feedback trace file: " + filename);
+    }
+    for (size_t i = 0; i < entries.size(); i++) {
+        const auto& entry = entries[i];
+        f << "{";
+        f << "\"idx\":" << entry.idx << ",";
+        f << "\"center_x\":" << entry.center_x << ",";
+        f << "\"center_y\":" << entry.center_y << ",";
+        f << "\"write_xs\":[";
+        for (int col = 0; col < 5; col++) {
+            if (col != 0) {
+                f << ",";
+            }
+            f << entry.write_xs[col];
+        }
+        f << "],";
+        f << "\"columns_u10\":[";
+        for (int col = 0; col < 5; col++) {
+            if (col != 0) {
+                f << ",";
+            }
+            f << "[";
+            for (int row = 0; row < 5; row++) {
+                if (row != 0) {
+                    f << ",";
+                }
+                f << entry.columns_u10[col][row];
+            }
+            f << "]";
+        }
+        f << "]";
+        f << "}\n";
+    }
+}
 
 ImgInfo load_img_info(const string& filename) {
     const string content = read_text_file(filename);
@@ -165,6 +262,8 @@ ImgInfo load_img_info(const string& filename) {
     info.height = parse_json_int(content, "height", 64);
     info.input_path = parse_json_string(content, "input_path", "");
     info.hls_output_path = parse_json_string(content, "hls_pattern_path", "");
+    info.hls_stage4_input_trace_path = parse_json_string(content, "hls_stage4_input_trace_path", "");
+    info.hls_feedback_commit_trace_path = parse_json_string(content, "hls_feedback_commit_trace_path", "");
     if (info.input_path.empty()) {
         throw runtime_error("img_info.json missing image.input_path");
     }
@@ -219,8 +318,13 @@ int main(int argc, char* argv[]) {
 
         const string output_path = output_override.empty() ? img_info.hls_output_path : output_override;
         vector<pixel_t> input = load_input(img_info.input_path, img_info.width, img_info.height);
+        csiir_debug::TraceStore trace_store;
+        csiir_debug::set_trace_store(&trace_store);
         vector<pixel_t> output = process_top(input, img_info.width, img_info.height, regs);
+        csiir_debug::clear_trace_store();
         save_output(output_path, output);
+        save_stage4_input_trace(img_info.hls_stage4_input_trace_path, trace_store.stage4_input_trace);
+        save_feedback_commit_trace(img_info.hls_feedback_commit_trace_path, trace_store.feedback_commit_trace);
 
         int min_in = 1024;
         int max_in = 0;
@@ -246,6 +350,12 @@ int main(int argc, char* argv[]) {
         cout << "Input range:     [" << min_in << ", " << max_in << "]" << endl;
         cout << "Output range:    [" << min_out << ", " << max_out << "]" << endl;
         cout << "Output written:  " << output_path << endl;
+        if (!img_info.hls_stage4_input_trace_path.empty()) {
+            cout << "Stage4 trace:    " << img_info.hls_stage4_input_trace_path << endl;
+        }
+        if (!img_info.hls_feedback_commit_trace_path.empty()) {
+            cout << "Feedback trace:  " << img_info.hls_feedback_commit_trace_path << endl;
+        }
         return 0;
     } catch (const exception& ex) {
         cerr << "Error: " << ex.what() << endl;
