@@ -139,6 +139,10 @@ inline int round_div(int num, int den) {
     return - (((-num) + den / 2) / den);
 }
 
+inline int abs_i(int value) {
+    return (value < 0) ? -value : value;
+}
+
 template<typename T>
 inline T clip(T value, int min_val, int max_val) {
     if (value < min_val) return min_val;
@@ -188,8 +192,8 @@ public:
                   - window[20] - window[21] - window[22] - window[23] - window[24];
         int sum_v = window[0] + window[5] + window[10] + window[15] + window[20]
                   - window[4] - window[9] - window[14] - window[19] - window[24];
-        grad_h = (grad_t)abs(sum_h);
-        grad_v = (grad_t)abs(sum_v);
+        grad_h = (grad_t)abs_i(sum_h);
+        grad_v = (grad_t)abs_i(sum_v);
         int grad_i = round_div(grad_h, 5) + round_div(grad_v, 5);
         grad = (grad_t)clip<int>(grad_i, 0, 127);
     }
@@ -427,7 +431,7 @@ public:
         s11_t b0_hor = saturate_s11(round_div((int)ratio * blend0_g + (64 - ratio) * avg0_u, 64));
         s11_t b1_hor = saturate_s11(round_div((int)ratio * blend1_g + (64 - ratio) * avg1_u, 64));
 
-        bool horiz_dom = abs(grad_v) > abs(grad_h);
+        bool horiz_dom = (int)grad_v > (int)grad_h;
 
         // Orientation factor
         static const int F_ORI_V[PATCH_SIZE] = {0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0};
@@ -668,8 +672,8 @@ void isp_csiir_top(
                 entry.center_x = x;
                 entry.center_y = target_row;
                 entry.win_size = win_size;
-                entry.grad_h = abs((int)grad_h);
-                entry.grad_v = abs((int)grad_v);
+                entry.grad_h = (int)grad_h;
+                entry.grad_v = (int)grad_v;
                 entry.blend0 = fusion.blend0;
                 entry.blend1 = fusion.blend1;
                 entry.avg0_u = dir_avg.avg0_u;
