@@ -1,5 +1,8 @@
 #===============================================================================
-# Vivado HLS TCL Script for ISP-CSIIR HLS Synthesis
+# Legacy Vivado HLS TCL Script for ISP-CSIIR HLS Synthesis
+#------------------------------------------------------------------------------
+# This repo's active HLS flow is Catapult. Keep this file only as a legacy
+# reference for historical comparison; do not treat it as the primary flow.
 #===============================================================================
 
 set project_name "isp_csiir_hls"

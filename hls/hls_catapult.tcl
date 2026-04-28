@@ -8,6 +8,7 @@
 #   - Synthesize only the DUT in `isp_csiir_hls_top.cpp`
 #   - Force the Catapult backend (`ac_int` / `ac_channel`)
 #   - Force synthesis mode so debug-only STL code stays excluded
+#   - Centralize HLS implementation constraints in Tcl instead of C++ pragmas
 #   - Provide explicit search paths for local headers and AC datatypes
 #===============================================================================
 
@@ -32,9 +33,9 @@ set tb_file          [file join $script_dir "isp_csiir_hls_top_tb.cpp"]
 set output_dir       [file join $project_root "catapult_prj"]
 set rtl_lang         "verilog"
 
-# This DUT only needs C++11 language features for synthesis.
-# Keeping the standard conservative improves Catapult compatibility.
-set cpp_std          "-std=c++11"
+# This DUT currently builds cleanly with C++17 in host testbench and Catapult
+# flow. Keeping one language level avoids drift between simulation and HLS.
+set cpp_std          "-std=c++17"
 
 # Required compile definitions:
 #   - CSIIR_HLS_BACKEND_CATAPULT: selects ac_int/ac_channel backend
@@ -71,7 +72,7 @@ project new
 solution new $solution_name
 
 # Keep language / RTL settings explicit.
-solution options set /Input/CppStandard c++11
+solution options set /Input/CppStandard c++17
 solution options set /Output/OutputLanguage $rtl_lang
 solution options set /Output/OutputDirectory [file join $output_dir "${project_name}_${solution_name}_rtl"]
 
@@ -107,6 +108,19 @@ directive set /$top_name -RESETS "{$rst_name {-RESET_ACTIVE $reset_active -RESET
 #
 # Catapult can synthesize these directly as channel / struct ports. Do not force
 # guessed bus mapping syntax here; keep packaging decisions version-local.
+
+#--------------------------
+# Architecture directives
+#--------------------------
+# Keep all implementation constraints here rather than inside C++ source.
+# The current source is intentionally free of tool-specific interface/unroll
+# pragmas. Add Catapult directives below as timing/area data justifies them.
+#
+# Examples to enable when needed:
+# directive set /$top_name -PIPELINE_INIT_INTERVAL 1
+# directive set /$top_name/grad_pxl_lb:rsc -MAP_TO_MEMORY {2P}
+# directive set /$top_name/filt_pxl_lb:rsc -MAP_TO_MEMORY {2P}
+# directive set /$top_name/process_row -UNROLL no
 
 #--------------------------
 # Optional technology library

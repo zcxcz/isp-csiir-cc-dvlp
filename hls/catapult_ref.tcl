@@ -59,10 +59,11 @@ set techlib_name ""
 # Project setup
 #--------------------------
 file mkdir $output_dir
-project new $project_name
-project saveas [file join $output_dir $project_name]
+cd $output_dir
+options set ProjectInit ProjectNamePrefix $project_name
+project new
 
-solution new -state initial $solution_name
+solution new $solution_name
 solution options set /Input/CppStandard c++17
 
 #--------------------------
@@ -110,10 +111,10 @@ if {$techlib_name ne ""} {
 #--------------------------
 # Optional architecture directives
 #--------------------------
-# Start conservative. The source already contains the key local-array partition
-# and loop-unroll intent via abstraction macros on the Vivado side. Under
-# Catapult, it is usually better to add further scheduling/binding directives
-# after the first compile based on the reports.
+# Start conservative. The C++ source is intentionally kept free of tool-specific
+# interface / unroll / partition pragmas so all implementation constraints are
+# managed here in Tcl. Add scheduling/binding directives after the first compile
+# based on actual Catapult reports.
 #
 # Examples you may enable after the first pass:
 # directive set /$top_name -PIPELINE_INIT_INTERVAL 1
@@ -146,7 +147,7 @@ project save
 
 puts ""
 puts "Catapult reference flow completed."
-puts "Project   : [file join $output_dir $project_name]"
+puts "ProjectDir: $output_dir"
 puts "Solution  : $solution_name"
 puts "Top       : $top_name"
 puts "Clock(ns) : $clk_period_ns"

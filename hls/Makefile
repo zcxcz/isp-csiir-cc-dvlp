@@ -1,8 +1,8 @@
 # ISP-CSIIR HLS Model Makefile
-# Supports both g++ compilation with HLS library and Vivado HLS synthesis
+# Host testbench build plus Catapult entrypoints
 
 CXX = g++
-CXXFLAGS = -std=c++17 -O2 -Wall -Wextra -I./hls_lib
+CXXFLAGS = -std=c++17 -O2 -Wall -Wextra -DCSIIR_HLS_BACKEND_CATAPULT=1 -I. -I./third_party/ac_types/include
 HLS_DIR = .
 
 # Source files
@@ -27,30 +27,30 @@ run_tb: $(TB_EXE)
 clean:
 	rm -f $(HLS_DIR)/hls_top_tb $(HLS_DIR)/*.out
 
-# Clean all (including Vivado HLS)
+# Clean all generated directories
 distclean: clean
-	rm -rf isp_csiir_hls/ solution_1/
+	rm -rf catapult_prj/
 
-# Vivado HLS synthesis (requires Vivado HLS)
-VIVADO_HLS ?= vivado_hls
+# Catapult synthesis (requires Catapult)
+CATAPULT ?= catapult
 
-hls_synth:
-	cd $(HLS_DIR) && $(VIVADO_HLS) -f hls.tcl
+catapult:
+	cd $(HLS_DIR) && $(CATAPULT) -shell -file hls_catapult.tcl
 
-hls_csim:
-	cd $(HLS_DIR) && $(VIVADO_HLS) -f hls.tcl -csim
+catapult_ref:
+	cd $(HLS_DIR) && $(CATAPULT) -shell -file catapult_ref.tcl
 
 # Show help
 help:
 	@echo "ISP-CSIIR HLS Top Module Makefile"
 	@echo ""
 	@echo "Targets:"
-	@echo "  all            - Compile testbench (default)"
-	@echo "  run_tb         - Run testbench"
+	@echo "  all            - Compile host testbench with Catapult datatype backend"
+	@echo "  run_tb         - Run host testbench"
 	@echo "  clean          - Remove compiled files"
-	@echo "  distclean      - Remove all generated files"
-	@echo "  hls_synth      - Run Vivado HLS synthesis"
-	@echo "  hls_csim       - Run Vivado HLS C simulation"
+	@echo "  distclean      - Remove generated directories"
+	@echo "  catapult       - Run Catapult synthesis flow"
+	@echo "  catapult_ref   - Run Catapult reference flow"
 	@echo ""
-	@echo "For full HLS synthesis with Vivado HLS:"
-	@echo "  make hls_synth"
+	@echo "For Catapult synthesis:"
+	@echo "  make catapult"
