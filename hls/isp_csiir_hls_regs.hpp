@@ -5,10 +5,10 @@
 // Used by both HLS top and testbench
 //==============================================================================
 
-#ifndef ISP_CSIIR_REGS_HPP
-#define ISP_CSIIR_REGS_HPP
+#ifndef ISP_CSIIR_HLS_REGS_HPP
+#define ISP_CSIIR_HLS_REGS_HPP
 
-#include "csiir_hls_backend.hpp"
+#include "isp_csiir_hls_backend.hpp"
 
 //==============================================================================
 // Register Group Struct
@@ -57,4 +57,4 @@ struct ISPCSIIR_Regs {
     }
 };
 
-#endif // ISP_CSIIR_REGS_HPP
+#endif // ISP_CSIIR_HLS_REGS_HPP

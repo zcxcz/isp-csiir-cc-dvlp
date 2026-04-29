@@ -9,8 +9,8 @@
 #ifndef __SYNTHESIS__
 #include <vector>
 #endif
-#include "csiir_hls_backend.hpp"
-#include "isp_csiir_regs.hpp"
+#include "isp_csiir_hls_backend.hpp"
+#include "isp_csiir_hls_regs.hpp"
 
 static const int DATA_WIDTH_I = 10;
 static const int GRAD_WIDTH_I = 14;

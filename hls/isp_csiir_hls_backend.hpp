@@ -6,8 +6,8 @@
 // in the HLS tool Tcl, not scattered in C++ source.
 //==============================================================================
 
-#ifndef CSIIR_HLS_BACKEND_HPP
-#define CSIIR_HLS_BACKEND_HPP
+#ifndef ISP_CSIIR_HLS_BACKEND_HPP
+#define ISP_CSIIR_HLS_BACKEND_HPP
 
 #if !defined(CSIIR_HLS_BACKEND_VIVADO) && !defined(CSIIR_HLS_BACKEND_CATAPULT)
 #define CSIIR_HLS_BACKEND_CATAPULT 1
@@ -48,4 +48,4 @@ using stream_t = ac_channel<T>;
 }  // namespace csiir_hls
 #endif
 
-#endif  // CSIIR_HLS_BACKEND_HPP
+#endif  // ISP_CSIIR_HLS_BACKEND_HPP
